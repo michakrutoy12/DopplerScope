@@ -53,7 +53,7 @@ Use **Zoom +**, **Zoom −**, and **Fit** for plot navigation.
 The default filename is:
 
 ```text
-tools/curve_tool/observed_curve.csv
+data/observed_curve.csv
 ```
 
 The save dialog can be used to select another destination. The exported CSV

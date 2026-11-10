@@ -9,6 +9,11 @@ import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
 
 
+DEFAULT_CURVE_PATH = (
+    Path(__file__).resolve().parents[3] / "data" / "observed_curve.csv"
+)
+
+
 class CurveViewBox(pg.ViewBox):
     pointAdded = QtCore.Signal(float, float)
     pointMoved = QtCore.Signal(int, float, float)
@@ -442,11 +447,10 @@ class CurveTool(QtWidgets.QMainWindow):
                 "Add at least two points before exporting a curve.",
             )
             return
-        default_path = Path(__file__).resolve().parents[1] / "observed_curve.csv"
         path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Export observed curve",
-            str(default_path),
+            str(DEFAULT_CURVE_PATH),
             "CSV files (*.csv)",
         )
         if not path:

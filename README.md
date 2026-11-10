@@ -41,9 +41,21 @@ The aircraft track recorder also requires `requests`:
 python3 -m pip install requests
 ```
 
-The terrain-backed commands expect the included `data/GEBCO_2026.nc` file to
-be readable by Xarray and to contain an `elevation` variable on `lat` and
-`lon` coordinates.
+The terrain-backed commands expect `data/GEBCO_2026.nc`, a NetCDF dataset with
+an `elevation` variable on `lat` and `lon` coordinates. The large dataset is
+distributed through GitHub Releases in multiple archive parts rather than
+being stored in the repository. Download every `height_data.tar.gz.*` part
+from the same release into `data/`, then assemble and extract them from that
+directory:
+
+```sh
+cd data
+cat height_data.tar.gz.* | tar -xvzf -
+cd ..
+```
+
+After extraction, make sure `data/GEBCO_2026.nc` exists. All archive parts are
+required; keep them together in the same directory while running the command.
 
 ## Quick start: measure a curve and estimate the observer
 
@@ -74,7 +86,7 @@ At least two points are required for export. **Export curve…** saves the
 measurement as:
 
 ```text
-tools/curve_tool/observed_curve.csv
+data/observed_curve.csv
 ```
 
 The CSV has a header and two columns:
@@ -91,21 +103,22 @@ export. The curve tool can also save to another path.
 ### 3. Estimate the observer position
 
 ```sh
-python3 main.py optimize
+python3 main.py optimize --track data/test_track.csv
 ```
 
-The optimizer loads the exported curve, the default flight track
-(`data/49d665_track.csv`), and the terrain dataset
-(`data/GEBCO_2026.nc`). It prints the estimated latitude and longitude,
-horizontal offsets from the reference point, terrain elevation, time offset,
-estimated source frequency, fit variance, and optimizer status.
+The optimizer loads the exported curve, the selected flight track, and the
+terrain dataset (`data/GEBCO_2026.nc`). It prints the estimated latitude and
+longitude, horizontal offsets from the reference point, terrain elevation,
+time offset, estimated source frequency, fit variance, and optimizer status.
 
-To use another curve or track:
+The CLI default track path is `data/49d665_track.csv`, which is not tracked in
+the repository. Create it with the recorder or pass an existing track such as
+`data/test_track.csv`. To use another curve or track:
 
 ```sh
 python3 main.py optimize \
   --observations path/to/curve.csv \
-  --track data/47a3b0_track.csv
+  --track data/test_track.csv
 ```
 
 The bundled `data/observed_curve.csv` is an example curve; select it explicitly
@@ -141,7 +154,7 @@ python3 main.py track [--track PATH] [--origin-lat DEGREES] \
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--track` | `data/49d665_track.csv` | Flight track CSV. |
+| `--track` | `data/49d665_track.csv` (local file) | Flight track CSV; use `--track data/test_track.csv` for the tracked sample. |
 | `--origin-lat` | `51.364946` | Reference latitude in decimal degrees. |
 | `--origin-lon` | `0.856076` | Reference longitude in decimal degrees. |
 | `--plot` | Off | Show the 3D interpolated flight path. |
@@ -160,7 +173,7 @@ python3 main.py simulate \
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--track` | `data/49d665_track.csv` | Flight track CSV. |
+| `--track` | `data/49d665_track.csv` (local file) | Flight track CSV; use `--track data/test_track.csv` for the tracked sample. |
 | `--origin-lat` | `51.364946` | Reference latitude in decimal degrees. |
 | `--origin-lon` | `0.856076` | Reference longitude in decimal degrees. |
 | `--observer-lat` | Required | Observer latitude in decimal degrees. |
@@ -179,6 +192,7 @@ Example:
 
 ```sh
 python3 main.py simulate \
+  --track data/test_track.csv \
   --observer-lat 51.364946 --observer-lon 0.856076 \
   --source-frequency 600
 ```
@@ -196,8 +210,8 @@ python3 main.py optimize [options]
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--track` | `data/49d665_track.csv` | Flight track CSV. |
-| `--observations` | `tools/curve_tool/observed_curve.csv` | Observed curve CSV; legacy tuple pickles are also accepted. |
+| `--track` | `data/49d665_track.csv` (local file) | Flight track CSV; use `--track data/test_track.csv` for the tracked sample. |
+| `--observations` | `data/observed_curve.csv` | Observed curve CSV; legacy tuple pickles are also accepted. |
 | `--origin-lat` | `51.364946` | Reference latitude in decimal degrees. |
 | `--origin-lon` | `0.856076` | Reference longitude in decimal degrees. |
 | `--width` | `10000` m | East-west search width, centered on the reference point. |
@@ -217,6 +231,7 @@ For example, to optimize from the bundled example curve without a terrain map:
 ```sh
 python3 main.py optimize \
   --observations data/observed_curve.csv \
+  --track data/test_track.csv \
   --no-elevation
 ```
 
@@ -317,14 +332,16 @@ per second.
 
 ## Data files
 
+Only `data/test_track.csv` and `data/observed_curve.csv` are kept in the
+repository, as specified by `.gitignore`. Recordings, generated outputs, local
+flight tracks, spectrogram snapshots, and terrain files are not included in
+the Git repository.
+
 | File | Purpose |
 | --- | --- |
-| `data/49d665_track.csv`, `data/47a3b0_track.csv` | Example aircraft tracks. |
-| `data/GEBCO_2026.nc` | Terrain elevation used by default for simulation and optimization. |
+| `data/test_track.csv` | Example flight track that can be used with `--track`. |
 | `data/observed_curve.csv` | Example measured time/frequency curve. |
-| `data/dermo.wav` | Example audio recording. |
-| `data/result_noisy_doppler.wav` | Example audio with a noisy Doppler signal. |
-| `data/test_segment.pkl` | Example spectrogram snapshot for the curve tool. |
+| `data/GEBCO_2026.nc` | Locally assembled terrain dataset; download its split archive parts from GitHub Releases. |
 
 ## Project layout
 
@@ -338,7 +355,7 @@ tools/
   record_track.py               ADS-B track recorder
   view_spectrogram/             Audio spectrogram viewer
   curve_tool/                   Manual curve extraction from a spectrogram
-data/                           Example tracks, audio, curves, and terrain
+data/                           Retained example data and local input/output files
 ```
 
 The core functions are:
