@@ -1,0 +1,13 @@
+*
+
+!.gitignore
+!README.md
+!LICENSE
+
+!src/
+!src/**
+!data
+!tools
+!tools/**
+
+__pycache__

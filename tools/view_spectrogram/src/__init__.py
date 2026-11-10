@@ -1,0 +1,1 @@
+"""Audio spectrogram viewer application."""
