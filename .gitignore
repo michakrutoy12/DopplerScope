@@ -6,8 +6,13 @@
 
 !src/
 !src/**
+
 !data
+!data/test_track.csv
+!data/observed_curve.csv
+
 !tools
 !tools/**
 
 __pycache__
+.DS_Store
