@@ -18,9 +18,7 @@ All commands below are run from the project root.
 
 ## Requirements and installation
 
-Use Python 3 and install the dependencies for the features you need. The
-repository does not currently include a dependency lockfile or a
-`requirements.txt`.
+Use Python 3 and install the dependencies for the features you need.
 
 The command-line application uses NumPy, pandas, SciPy, Matplotlib, and Xarray.
 The `netcdf` extra installs Xarray's common NetCDF backends:
@@ -43,8 +41,8 @@ python3 -m pip install requests
 
 The terrain-backed commands expect `data/GEBCO_2026.nc`, a NetCDF dataset with
 an `elevation` variable on `lat` and `lon` coordinates. The large dataset is
-distributed through GitHub Releases in multiple archive parts rather than
-being stored in the repository. Download every `height_data.tar.gz.*` part
+distributed through GitHub Releases in multiple archive parts due to the platform's limitations. 
+Download every `height_data.tar.gz.*` part
 from the same release into `data/`, then assemble and extract them from that
 directory:
 
@@ -226,6 +224,22 @@ python3 main.py optimize [options]
 | `--refine-starts` | `3` | Number of best coarse-grid candidates to refine. |
 | `--min-valid-fraction` | `1.0` | Minimum fraction of observations that must fit the flight track; range `(0, 1]`. |
 
+#### How the observer search works
+
+The optimizer searches for three values: the observer's east/west position
+`x`, north/south position `y`, and receive-time offset `delta_t`. It first
+evaluates a coarse grid across the requested bounds, including the origin when
+it is in range. For each candidate, it uses distance and sound speed to
+iteratively estimate when each observed sound was emitted, then corrects the
+measured frequencies for the aircraft's radial velocity. A good candidate
+produces nearly the same estimated source frequency for every observation, so
+the score is the variance of those estimated frequencies.
+
+The best coarse candidates are refined with Powell optimization inside local
+bounds around each starting point. The candidate with the lowest variance is
+returned. By default, candidates are rejected unless all observations fall
+within the flight track; `--min-valid-fraction` can lower this requirement.
+
 For example, to optimize from the bundled example curve without a terrain map:
 
 ```sh
@@ -332,9 +346,8 @@ per second.
 
 ## Data files
 
-Only `data/test_track.csv` and `data/observed_curve.csv` are kept in the
-repository, as specified by `.gitignore`. Recordings, generated outputs, local
-flight tracks, spectrogram snapshots, and terrain files are not included in
+Recordings, generated outputs, localflight tracks, 
+spectrogram snapshots, and terrain files are not included in
 the Git repository.
 
 | File | Purpose |
