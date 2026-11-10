@@ -407,18 +407,3 @@ At each candidate observer position and time offset, Doppler correction
 produces an estimate of the source frequency for every valid observation. The
 optimizer minimizes the variance of those estimates; their mean is reported as
 the estimated source frequency.
-
-## Notes and limitations
-
-- The optimizer searches a local east/north plane centered at the reference
-  latitude and longitude; `x` is east/west and `y` is north/south, in meters.
-- The optimizer's time offset is bounded by `--delta-min` and `--delta-max`.
-  Make sure the observed curve and selected bounds can fit within the flight
-  track.
-- Terrain-aware search requires the full search area to lie within the
-  interpolated terrain grid and contain usable elevation values.
-- The simulator uses a constant speed of sound of 343 m/s.
-- Track interpolation uses cubic splines. Input tracks should have enough
-  distinct, valid timestamps and positions for interpolation.
-- `main.py` is the supported command-line entry point. The audio and curve
-  applications are separate GUI tools under `tools/`.
