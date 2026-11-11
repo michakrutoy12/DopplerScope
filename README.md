@@ -1,50 +1,39 @@
 # DopplerScope
 
-DopplerScope is a small Python toolkit for studying the Doppler shift of sound
-from aircraft. It combines recorded flight tracks, audio spectrograms, manually
-traced frequency curves, terrain elevation, and a numerical observer-position
-optimizer.
+DopplerScope is a Python project for estimating where an aircraft recording was made from its Doppler shift.
 
-The project has two ways to work with a Doppler curve:
+The basic idea is to take an aircraft's flight track, find the aircraft's sound in a recording, trace its frequency over time, and compare that curve with the Doppler curves predicted for different observer locations.
 
-1. **Measure one:** open a recording in the spectrogram viewer, export a
-   spectrogram snapshot, trace the signal in the curve tool, and optimize the
-   observer position from the resulting CSV.
-2. **Generate one:** calculate a Doppler curve from a flight track and a
-   specified observer location, then optionally synthesize a WAV from that
-   curve.
+There are two main ways to use the project:
 
-All commands below are run from the project root.
+- **Estimate a location:** load a recording, trace the Doppler line in its spectrogram, and run the optimizer.
+- **Simulate a recording:** use a known flight track and observer location to generate a Doppler curve, then optionally turn it into a WAV file.
 
-## Requirements and installation
+## Installation
 
-Use Python 3 and install the dependencies for the features you need.
+The project requires Python 3.
 
-The command-line application uses NumPy, pandas, SciPy, Matplotlib, and Xarray.
-The `netcdf` extra installs Xarray's common NetCDF backends:
+Install the main dependencies:
 
 ```sh
 python3 -m pip install numpy pandas scipy matplotlib "xarray[netcdf]"
 ```
 
-For the audio viewer and curve tool, install the GUI and audio packages:
+For the spectrogram viewer and curve tool:
 
 ```sh
 python3 -m pip install PySide6 pyqtgraph soundfile sounddevice
 ```
 
-The aircraft track recorder also requires `requests`:
+For the ADS-B track recorder:
 
 ```sh
 python3 -m pip install requests
 ```
 
-The terrain-backed commands expect `data/GEBCO_2026.nc`, a NetCDF dataset with
-an `elevation` variable on `lat` and `lon` coordinates. The large dataset is
-distributed through GitHub Releases in multiple archive parts due to the platform's limitations. 
-Download every `height_data.tar.gz.*` part
-from the same release into `data/`, then assemble and extract them from that
-directory:
+### Terrain data
+
+The `simulate` and `estimate` commands use `data/GEBCO_2026.nc` by default. Download all `height_data.tar.gz.*` parts from the same GitHub Release into `data/`, then extract them:
 
 ```sh
 cd data
@@ -52,42 +41,41 @@ cat height_data.tar.gz.* | tar -xvzf -
 cd ..
 ```
 
-After extraction, make sure `data/GEBCO_2026.nc` exists. All archive parts are
-required; keep them together in the same directory while running the command.
+The resulting file should be `data/GEBCO_2026.nc`.
 
-## Quick start: measure a curve and estimate the observer
+## Quick start
 
-### 1. Open a recording and export its spectrogram
+### 1. Record or get a flight track
+
+You can use your own ADS-B track or record one with:
+
+```sh
+python3 tools/record_track.py
+```
+
+The recorder uses the `adsb.lol` API, lets you select an aircraft, and saves its positions to a CSV file. Press `Ctrl+C` to stop recording.
+
+The default track path used by some commands is `data/49d665_track.csv`. That file is not included in the repository, so pass the path to your own track if needed.
+
+### 2. Open an audio recording
 
 ```sh
 python3 tools/view_spectrogram/main.py
 ```
 
-Choose **Open audio…** and select a recording. The viewer supports WAV, FLAC,
-OGG, AIFF, and AU files through SoundFile. It calculates the visible
-spectrogram on demand so you can change the time and frequency range without
-rendering the entire recording at full resolution.
+Open a recording and find a visible aircraft-related frequency line. The viewer supports WAV, FLAC, OGG, AIFF, and AU files.
 
-Use **Export visible data…** to save the currently displayed time segment as a
-pickle snapshot. The snapshot contains the spectrogram in dB, time and
-frequency bin edges, and analysis settings.
+You can zoom and pan, select a time range, adjust the frequency range and display contrast, and listen to the recording with optional playback filters. Export the visible part of the spectrogram using **Export visible data…**.
 
-### 2. Trace the Doppler line
+### 3. Trace the Doppler curve
 
 ```sh
 python3 tools/curve_tool/main.py
 ```
 
-Choose **Open snapshot…** and select the snapshot from the previous step. Add
-points along the signal in time order; drag points to refine their positions.
-At least two points are required for export. **Export curve…** saves the
-measurement as:
+Open the snapshot exported by the viewer and add points along the frequency line. You can move or delete points to improve the trace.
 
-```text
-data/observed_curve.csv
-```
-
-The CSV has a header and two columns:
+Export the result as a CSV. It contains two columns:
 
 ```csv
 time_s,frequency_hz
@@ -95,55 +83,66 @@ time_s,frequency_hz
 13.0,608.1
 ```
 
-Times are seconds and frequencies are hertz. The points are sorted by time on
-export. The curve tool can also save to another path.
+The times are in seconds and the frequencies are in hertz.
 
-### 3. Estimate the observer position
+### 4. Estimate the observer position
 
-```sh
-python3 main.py optimize --track data/test_track.csv
-```
-
-The optimizer loads the exported curve, the selected flight track, and the
-terrain dataset (`data/GEBCO_2026.nc`). It prints the estimated latitude and
-longitude, horizontal offsets from the reference point, terrain elevation,
-time offset, estimated source frequency, fit variance, and optimizer status.
-
-The CLI default track path is `data/49d665_track.csv`, which is not tracked in
-the repository. Create it with the recorder or pass an existing track such as
-`data/test_track.csv`. To use another curve or track:
+Run the optimizer with the measured curve and the aircraft track:
 
 ```sh
-python3 main.py optimize \
-  --observations path/to/curve.csv \
+python3 main.py estimate \
+  --observations data/observed_curve.csv \
   --track data/test_track.csv
 ```
 
-The bundled `data/observed_curve.csv` is an example curve; select it explicitly
-with `--observations data/observed_curve.csv` if you want to use it instead of
-the curve-tool export.
+The result includes the estimated latitude and longitude, the offset from the reference point, the estimated time offset, source frequency, and fit variance.
 
-## Command-line reference
+If you want to use the bundled example curve, pass `--observations data/observed_curve.csv`. Otherwise, use the CSV exported from the curve tool.
 
-Show all commands:
+## Why does it work?
+
+The method relies on a simple property of the Doppler effect: the frequency heard by an observer depends on how quickly the aircraft is moving towards or away from them.
+
+When the aircraft approaches, the observed frequency is higher. After it passes and moves away, the observed frequency becomes lower. The important part is that this change depends on the observer's position, because moving the observer changes the aircraft's radial velocity throughout the flight.
+
+For a sound with source frequency `f_source`, the received frequency is modelled as:
+
+```text
+f_received = f_source * c / (c + v_radial)
+```
+
+Here, `c` is the speed of sound (343 m/s in the current model), and `v_radial` is the aircraft's velocity component along the line between the aircraft and the observer. Positive radial velocity means the aircraft is moving away.
+
+The optimizer works backwards from the measured curve:
+
+1. It takes a possible observer position and a possible time offset between the recording and the flight track.
+2. For every measured point, it finds the corresponding aircraft position and velocity.
+3. It accounts for the time sound needs to travel from the aircraft to the observer. In other words, the sound was emitted earlier than the moment it was recorded.
+4. Using the aircraft's radial velocity, it reverses the Doppler shift and estimates the frequency that the aircraft must have emitted.
+5. It repeats this for all points in the curve and checks how consistent those estimated source frequencies are.
+
+The actual emitted frequency is not expected to jump around just because the aircraft moves. So, if a candidate observer position is correct, reversing the Doppler shift should give roughly the same source frequency for the whole curve.
+
+That gives the optimizer a score: the variance of the estimated source frequencies. A lower variance means the candidate position explains the measured curve better.
+
+The search first checks a coarse grid of possible east/west positions, north/south positions, and time offsets. It then refines the best candidates with Powell optimization. The mean of the inferred source frequencies is reported as the estimated source frequency.
+
+This is why the method can estimate a position without knowing the exact emitted frequency beforehand: the frequency is estimated together with the observer position, while the optimizer looks for the position that makes it most consistent.
+
+The result still depends on the quality of the inputs. A noisy or incorrectly traced spectrogram line, an inaccurate flight track, or a source whose frequency changes significantly during the recording can make the estimate less reliable. Terrain data is also useful when the observer is not at sea level.
+
+## Command-line usage
+
+Run all commands from the project root. Use `--help` to see the available options:
 
 ```sh
 python3 main.py --help
+python3 main.py estimate --help
 ```
-
-Show options for one command:
-
-```sh
-python3 main.py optimize --help
-```
-
-Explicit relative paths are resolved from the current working directory.
-Default input and output paths are anchored to the project directory.
 
 ### `track`
 
-Load a flight CSV, report its duration and point count, and optionally display
-its interpolated 3D path.
+Load a flight CSV, show its duration and number of points, and optionally plot the interpolated 3D path.
 
 ```sh
 python3 main.py track [--track PATH] [--origin-lat DEGREES] \
@@ -152,16 +151,14 @@ python3 main.py track [--track PATH] [--origin-lat DEGREES] \
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--track` | `data/49d665_track.csv` (local file) | Flight track CSV; use `--track data/test_track.csv` for the tracked sample. |
-| `--origin-lat` | `51.364946` | Reference latitude in decimal degrees. |
-| `--origin-lon` | `0.856076` | Reference longitude in decimal degrees. |
-| `--plot` | Off | Show the 3D interpolated flight path. |
+| `--track` | `data/49d665_track.csv` | Flight track CSV. |
+| `--origin-lat` | `51.364946` | Reference latitude. |
+| `--origin-lon` | `0.856076` | Reference longitude. |
+| `--plot` | Off | Display the 3D flight path. |
 
 ### `simulate`
 
-Calculate the Doppler-shifted frequency and sound arrival time for an observer
-at a known location. Save the result to a CSV with `time_s` and
-`frequency_hz` columns.
+Generate a Doppler curve for a known observer position.
 
 ```sh
 python3 main.py simulate \
@@ -171,20 +168,20 @@ python3 main.py simulate \
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--track` | `data/49d665_track.csv` (local file) | Flight track CSV; use `--track data/test_track.csv` for the tracked sample. |
-| `--origin-lat` | `51.364946` | Reference latitude in decimal degrees. |
-| `--origin-lon` | `0.856076` | Reference longitude in decimal degrees. |
-| `--observer-lat` | Required | Observer latitude in decimal degrees. |
-| `--observer-lon` | Required | Observer longitude in decimal degrees. |
-| `--observer-alt` | `0` m | Observer altitude when terrain loading is disabled. |
+| `--track` | `data/49d665_track.csv` | Flight track CSV. |
+| `--origin-lat` | `51.364946` | Reference latitude. |
+| `--origin-lon` | `0.856076` | Reference longitude. |
+| `--observer-lat` | Required | Observer latitude. |
+| `--observer-lon` | Required | Observer longitude. |
+| `--observer-alt` | `0` m | Observer altitude when terrain is disabled. |
 | `--source-frequency` | Required | Emitted frequency in hertz. |
-| `--dt` | `0.1` s | Interval between simulated samples. |
-| `--elevation` | `data/GEBCO_2026.nc` | NetCDF elevation data, loaded with Xarray. |
-| `--no-elevation` | Off | Skip terrain loading and use `--observer-alt`. |
-| `--map-width` | `10000` m | East-west terrain grid width around the reference point. |
-| `--map-height` | `10000` m | North-south terrain grid height around the reference point. |
+| `--dt` | `0.1` s | Simulation sample interval. |
+| `--elevation` | `data/GEBCO_2026.nc` | Terrain dataset. |
+| `--no-elevation` | Off | Disable terrain data. |
+| `--map-width` | `10000` m | Terrain grid width. |
+| `--map-height` | `10000` m | Terrain grid height. |
 | `--map-step` | `100` m | Terrain grid spacing. |
-| `--output` | `data/simulated_curve.csv` | Output curve CSV. |
+| `--output` | `data/simulated_curve.csv` | Output CSV path. |
 
 Example:
 
@@ -195,78 +192,46 @@ python3 main.py simulate \
   --source-frequency 600
 ```
 
-### `optimize`
+### `estimate`
 
-Find the horizontal observer position and receive-time offset that minimize
-the variance of the source frequencies inferred from the measured curve.
-Optimization uses a coarse grid search followed by bounded Powell refinement.
-By default, every observation must fit within the flight track.
+Estimate the observer position from a measured Doppler curve.
 
 ```sh
-python3 main.py optimize [options]
+python3 main.py estimate [options]
 ```
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--track` | `data/49d665_track.csv` (local file) | Flight track CSV; use `--track data/test_track.csv` for the tracked sample. |
-| `--observations` | `data/observed_curve.csv` | Observed curve CSV; legacy tuple pickles are also accepted. |
-| `--origin-lat` | `51.364946` | Reference latitude in decimal degrees. |
-| `--origin-lon` | `0.856076` | Reference longitude in decimal degrees. |
-| `--width` | `10000` m | East-west search width, centered on the reference point. |
-| `--height` | `10000` m | North-south search height, centered on the reference point. |
-| `--elevation` | `data/GEBCO_2026.nc` | NetCDF elevation data, loaded with Xarray. |
-| `--no-elevation` | Off | Skip terrain data and assume zero observer elevation. |
-| `--grid-step` | `100` m | Terrain grid spacing. Keep the terrain grid large enough to cover the search area. |
-| `--delta-min` | `0` s | Minimum receive-time offset. |
-| `--delta-max` | Automatic | Maximum offset that fits the final observation in the flight duration. |
-| `--coarse-xy-step` | `2000` m | Coarse search spacing on each horizontal axis. |
-| `--coarse-time-step` | `30` s | Coarse search spacing for the time offset. |
-| `--refine-starts` | `3` | Number of best coarse-grid candidates to refine. |
-| `--min-valid-fraction` | `1.0` | Minimum fraction of observations that must fit the flight track; range `(0, 1]`. |
+| `--track` | `data/49d665_track.csv` | Flight track CSV. |
+| `--observations` | `data/observed_curve.csv` | Measured curve CSV. Legacy tuple pickles are also accepted. |
+| `--origin-lat` | `51.364946` | Latitude of the reference point around which the observer position is searched. |
+| `--origin-lon` | `0.856076` | Longitude of the reference point around which the observer position is searched. |
+| `--width` | `10000` m | East/west search width. |
+| `--height` | `10000` m | North/south search height. |
+| `--elevation` | `data/GEBCO_2026.nc` | Terrain dataset. |
+| `--no-elevation` | Off | Disable terrain data and use zero observer elevation. |
+| `--grid-step` | `100` m | Terrain grid spacing. |
+| `--delta-min` | `0` s | Minimum time offset. |
+| `--delta-max` | Automatic | Maximum time offset that fits the observations in the track. |
+| `--coarse-xy-step` | `2000` m | Coarse search spacing. |
+| `--coarse-time-step` | `30` s | Coarse time-offset spacing. |
+| `--refine-starts` | `3` | Number of coarse candidates to refine. |
+| `--min-valid-fraction` | `1.0` | Minimum fraction of observations that must fit the track. |
 
-#### How the observer search works
+For each new recording, set both `--origin-lat` and `--origin-lon` to a reference point near the observer: the optimizer searches around that point. The listed defaults are example coordinates, not suitable assumptions for every recording.
 
-The optimizer searches for three values: the observer's east/west position
-`x`, north/south position `y`, and receive-time offset `delta_t`. It first
-evaluates a coarse grid across the requested bounds, including the origin when
-it is in range. For each candidate, it uses distance and sound speed to
-iteratively estimate when each observed sound was emitted, then corrects the
-measured frequencies for the aircraft's radial velocity. A good candidate
-produces nearly the same estimated source frequency for every observation, so
-the score is the variance of those estimated frequencies.
-
-The best coarse candidates are refined with Powell optimization inside local
-bounds around each starting point. The candidate with the lowest variance is
-returned. By default, candidates are rejected unless all observations fall
-within the flight track; `--min-valid-fraction` can lower this requirement.
-
-For example, to optimize from the bundled example curve without a terrain map:
+Example without terrain data:
 
 ```sh
-python3 main.py optimize \
+python3 main.py estimate \
   --observations data/observed_curve.csv \
   --track data/test_track.csv \
   --no-elevation
 ```
 
-#### Terrain handling
-
-Terrain is not rendered or exported as a separate step. For `simulate` and
-`optimize`, the application opens the NetCDF file with `xarray.open_dataset`,
-interpolates the `elevation` variable over a local latitude/longitude grid,
-converts that grid to east/north meter coordinates, and passes both arrays
-directly to the Doppler calculation. The grid is centered on the reference
-latitude and longitude. Candidates outside the grid or over missing elevation
-values cannot be evaluated.
-
-Use `--no-elevation` to skip this process. In simulation the observer altitude
-then comes from `--observer-alt`; in optimization it defaults to zero.
-
 ### `synthesize`
 
-Generate a synthetic engine-like sound from a time/frequency CSV curve. The
-CSV must have a header followed by at least two rows; the first two columns are
-read as time in seconds and frequency in hertz.
+Create a synthetic engine-like WAV file from a time/frequency curve.
 
 ```sh
 python3 main.py synthesize [options]
@@ -274,136 +239,92 @@ python3 main.py synthesize [options]
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--curve` | `data/simulated_curve.csv` | Input time/frequency CSV. |
+| `--curve` | `data/simulated_curve.csv` | Input curve CSV. |
 | `--output` | `data/doppler.wav` | Output WAV file. |
-| `--sample-rate` | `44100` samples/s | Output sample rate. |
+| `--sample-rate` | `44100` | Sample rate in Hz. |
 | `--tone-amplitude` | `0.0002` | Fundamental tone amplitude. |
-| `--noise-amplitude` | `0.0003` | Added noise amplitude. |
-| `--line-thickness` | `3.0` Hz | Standard deviation of frequency jitter. |
-| `--harmonics` | `4` | Number of harmonics in the sound. |
-| `--modulation-depth` | `0.08` | Periodic amplitude modulation depth. |
-| `--modulation-rate` | `2.5` Hz | Periodic amplitude modulation rate. |
-| `--fade-fraction` | `0.15` | Fraction of the clip used for fade-in and fade-out; range `(0, 1]`. |
-| `--control-rate` | `200` samples/s | Rate of the low-frequency random modulation. |
-| `--seed` | Random | Optional seed for repeatable noise and modulation. |
+| `--noise-amplitude` | `0.0003` | Noise amplitude. |
+| `--line-thickness` | `3.0` Hz | Frequency jitter standard deviation. |
+| `--harmonics` | `4` | Number of harmonics. |
+| `--modulation-depth` | `0.08` | Amplitude modulation depth. |
+| `--modulation-rate` | `2.5` Hz | Amplitude modulation rate. |
+| `--fade-fraction` | `0.15` | Fade-in/fade-out fraction. |
+| `--control-rate` | `200` samples/s | Random modulation update rate. |
+| `--seed` | Random | Optional seed for repeatable output. |
 
-Typical workflow:
+Example:
 
 ```sh
 python3 main.py simulate \
   --observer-lat 51.364946 --observer-lon 0.856076 \
   --source-frequency 600
+
 python3 main.py synthesize --curve data/simulated_curve.csv
 ```
 
-## Audio tools
+## Other tools
 
 ### Spectrogram viewer
 
-Run `python3 tools/view_spectrogram/main.py` to view an audio recording. The
-viewer provides:
+```sh
+python3 tools/view_spectrogram/main.py
+```
 
-- FFT size, hop length, and channel selection;
-- minimum and maximum display frequencies and dynamic range;
-- time-range selection, zoom, pan, and a draggable playback position;
-- playback controls and an optional low-, high-, or band-pass playback filter;
-- export of the visible spectrogram region as a pickle snapshot.
-
-Scroll to zoom around the pointer, drag to pan, and right-drag to zoom to a
-rectangle. Use **Select range** to choose a time interval and **Show segment**
-or **Full recording** to change the displayed range.
+The viewer includes FFT and hop-length settings, channel selection, frequency and dynamic-range controls, time selection, zooming, panning, and playback. Playback can use low-pass, high-pass, or band-pass filtering.
 
 ### Curve tool
 
-Run `python3 tools/curve_tool/main.py` to open an exported spectrogram snapshot
-and trace the observed frequency over time. The tool supports contrast
-adjustment, zoom and pan, point insertion and dragging, point deletion, and
-curve clearing. It exports time-sorted CSV points.
+```sh
+python3 tools/curve_tool/main.py
+```
 
-Pickle files can execute code when opened. Only load spectrogram snapshots and
-legacy observation pickles from sources you trust.
+The curve tool opens a spectrogram snapshot and lets you add, move, and delete points before exporting the curve as CSV.
 
-## Flight track recorder
+**Note:** pickle files can execute code when opened. Only open snapshots and legacy observation pickles from sources you trust.
 
-`tools/record_track.py` polls the public ADS-B Exchange-compatible
-`adsb.lol` API for aircraft and appends the selected aircraft's positions to a
-CSV. It currently uses a fixed search location and radius configured at the
-top of the script, asks you to select an aircraft, and records until
-interrupted with **Ctrl+C**. Its polling interval is set by the final
-`record_track(5)` call.
-
-Run it from the project root:
+### Flight track recorder
 
 ```sh
 python3 tools/record_track.py
 ```
 
-The recorder needs network access and the `requests` package. Track files use
-the columns `timestamp`, `icao`, `flight`, `lat`, `lon`, `alt_baro`, `gs`, and
-`track`. The loader in `src/geo.py` converts timestamps to elapsed seconds,
-barometric altitude from feet to meters, and ground speed from knots to meters
-per second.
+The recorder polls the `adsb.lol` API, lets you choose an aircraft, and saves its positions until you stop it with `Ctrl+C`. The search location and radius are configured in the script.
+
+Track CSV files contain these columns:
+
+```text
+timestamp, icao, flight, lat, lon, alt_baro, gs, track
+```
+
+The loader converts timestamps to elapsed seconds, altitude from feet to meters, and ground speed from knots to meters per second.
 
 ## Data files
 
-Recordings, generated outputs, localflight tracks, 
-spectrogram snapshots, and terrain files are not included in
-the Git repository.
+Recordings, generated files, local flight tracks, spectrogram snapshots, and terrain data are not included in the repository.
 
-| File | Purpose |
+| File | Description |
 | --- | --- |
-| `data/test_track.csv` | Example flight track that can be used with `--track`. |
-| `data/observed_curve.csv` | Example measured time/frequency curve. |
-| `data/GEBCO_2026.nc` | Locally assembled terrain dataset; download its split archive parts from GitHub Releases. |
+| `data/test_track.csv` | Example flight track. |
+| `data/observed_curve.csv` | Example measured Doppler curve. |
+| `data/GEBCO_2026.nc` | Terrain dataset downloaded separately. |
 
-## Project layout
+## Project structure
 
 ```text
-main.py                         Command-line entry point
+main.py
 src/
-  audio.py                      Synthetic Doppler audio generation
-  doppler.py                    Doppler simulation and observer optimization
-  geo.py                        Flight-track interpolation and terrain grids
+  audio.py
+  doppler.py
+  geo.py
 tools/
-  record_track.py               ADS-B track recorder
-  view_spectrogram/             Audio spectrogram viewer
-  curve_tool/                   Manual curve extraction from a spectrogram
-data/                           Retained example data and local input/output files
+  record_track.py
+  view_spectrogram/
+  curve_tool/
+data/
 ```
 
-The core functions are:
+Main modules:
 
-- `src.geo.load_flight`: loads and interpolates a flight track in local
-  east/north coordinates.
-- `src.geo.get_height_map`: interpolates terrain elevation with Xarray.
-- `src.doppler.simulate_doppler`: calculates arrival times and Doppler-shifted
-  frequencies for a known observer.
-- `src.doppler.optimize_observer`: estimates observer position, terrain
-  elevation, time offset, and source frequency from observations.
-- `src.audio.embed_thick_doppler`: generates audio from a frequency curve.
-
-## Doppler model
-
-The flight track is converted to a local tangent plane relative to the
-reference point. East-west and north-south positions are measured in meters;
-aircraft altitude is also represented in meters. The simulator calculates the
-aircraft's radial velocity relative to the observer and applies:
-
-```text
-f_received = f_source × c / (c + v_radial)
-```
-
-where `c` is the fixed speed of sound (343 m/s). Radial velocity is positive
-when the aircraft is moving away from the observer. Arrival time includes
-propagation delay:
-
-```text
-t_arrival = t_emission + distance / c
-```
-
-For optimization, measured times are shifted so the first observation is at
-zero. The receive-time offset then positions this curve relative to the flight.
-At each candidate observer position and time offset, Doppler correction
-produces an estimate of the source frequency for every valid observation. The
-optimizer minimizes the variance of those estimates; their mean is reported as
-the estimated source frequency.
+- `src/geo.py` — flight-track loading, interpolation, and terrain data.
+- `src/doppler.py` — Doppler simulation and observer-position optimization.
+- `src/audio.py` — synthetic audio generation.
