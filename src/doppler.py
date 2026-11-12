@@ -84,7 +84,7 @@ def simulate_doppler(
 
 	observer = np.array([observer_x, observer_y, observer_alt])
 
-	positions, _ = flight.get_state(t_emit)
+	positions = flight.get_position(t_emit)
 	radial_velocity = flight.get_radial_velocity(t_emit, observer)
 
 	distances = np.linalg.norm(positions - observer, axis=1)
@@ -146,13 +146,13 @@ def _evaluate_candidate(
 	valid = np.ones(len(obs_time), dtype=bool)
 
 	for _ in range(6):
-		position, _ = flight.get_state(np.clip(emission_time, flight_start, flight_end))
+		position = flight.get_position(np.clip(emission_time, flight_start, flight_end))
 		distance = np.linalg.norm(position - observer, axis=-1)
 		emission_time = receive_time - distance / SOUND_SPEED
 		valid &= (emission_time >= flight_start) & (emission_time <= flight_end)
 		emission_time = np.clip(emission_time, flight_start, flight_end)
 
-	position, velocity = flight.get_state(emission_time)
+	position, velocity = flight.get_position(emission_time), flight.get_velocity(emission_time)
 	direction = position - observer
 	distance = np.maximum(np.linalg.norm(direction, axis=-1), 1e-9)
 	radial_velocity = np.sum(velocity * (direction / distance[:, None]), axis=-1)

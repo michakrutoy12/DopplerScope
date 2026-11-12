@@ -32,13 +32,12 @@ def get_height_map(data, center_lat, center_lon, width_m, height_m, step_m):
 
 
 class InterpolatedFlight:
-	def __init__(self, df, origin_lat, origin_lon, origin_alt=0.0):
+	def __init__(self, df, origin_lat, origin_lon, start_time):
 		self.df = df
 		self.t = df.index.to_numpy(dtype=float)
 
 		self.origin_lat = np.radians(origin_lat)
 		self.origin_lon = np.radians(origin_lon)
-		self.origin_alt = float(origin_alt)
 
 		lat = np.radians(df['lat'].to_numpy(dtype=float))
 		lon = np.radians(df['lon'].to_numpy(dtype=float))
@@ -64,37 +63,29 @@ class InterpolatedFlight:
 
 		self.vz_spline = self.z_spline.derivative()
 
-	def get_state(self, timestamp):
+	def get_position(self, timestamp):
 		t = np.asarray(timestamp, dtype=float)
 
 		if np.any(t < self.t[0]) or np.any(t > self.t[-1]):
 			raise ValueError("Timestamp outside flight duration")
 
-		position = np.stack([
+		return np.stack([
 			self.x_spline(t),
 			self.y_spline(t),
 			self.z_spline(t)
 		], axis=-1)
 
-		velocity = np.stack([
+	def get_velocity(self, timestamp):
+		t = np.asarray(timestamp, dtype=float)
+
+		if np.any(t < self.t[0]) or np.any(t > self.t[-1]):
+			raise ValueError("Timestamp outside flight duration")
+
+		return np.stack([
 			self.vx_spline(t),
 			self.vy_spline(t),
 			self.vz_spline(t)
 		], axis=-1)
-
-		return position, velocity
-
-	def get_radial_velocity(self, timestamp, origin_position):
-		position, velocity = self.get_state(timestamp)
-
-		relative_position = position - origin_position
-
-		distance = np.linalg.norm(relative_position, axis=-1)
-		distance = np.maximum(distance, 1e-6)
-
-		direction = relative_position / distance[..., None]
-
-		return np.sum(velocity * direction, axis=-1)
 
 
 def load_flight(filename, origin_lat, origin_lon):
@@ -109,8 +100,9 @@ def load_flight(filename, origin_lat, origin_lon):
 
 	df = df[~df.index.duplicated(keep='first')]
 
+	start_time = df.index[0]
 	df.index = (
-		df.index - df.index[0]
+		df.index - start_time
 	).total_seconds()
 
 	df['alt_baro'] = df['alt_baro'] * 0.3048
@@ -120,7 +112,8 @@ def load_flight(filename, origin_lat, origin_lon):
 	return InterpolatedFlight(
 		df,
 		origin_lat,
-		origin_lon
+		origin_lon,
+		start_time.timestamp()
 	)
 
 def plot_track(interpolated_df):
