@@ -78,6 +78,52 @@ def _load_observations(path):
 	return obs_time, obs_freq
 
 
+def _detect_audio_curve(args):
+	try:
+		import soundfile as sf
+	except ImportError as exc:
+		raise ImportError(
+			"Audio-based curve detection requires soundfile; "
+			"install it with `python3 -m pip install soundfile`"
+		) from exc
+
+	from src.curve_detection import detect_curves
+
+	audio, sample_rate = sf.read(args.audio, dtype="float32", always_2d=False)
+	curves = detect_curves(
+		audio,
+		sample_rate,
+		min_frequency=args.curve_min_frequency,
+		max_frequency=args.curve_max_frequency,
+		max_curves=args.curve_max_curves,
+	)
+	if not curves:
+		raise ValueError(
+			"No curves detected. Try adjusting --curve-min-frequency "
+			"and --curve-max-frequency."
+		)
+	if not 0 <= args.curve_index < len(curves):
+		raise ValueError(
+			f"Curve index {args.curve_index} is out of range; "
+			f"detection returned {len(curves)} curve(s), indexed from 0."
+		)
+
+	print(f"Detected {len(curves)} candidate curve(s) in {args.audio}:")
+	for index, curve in enumerate(curves):
+		print(
+			f"  {index}: duration={curve['duration']:.1f}s, "
+			f"confidence={curve['mean_confidence']:.2f}, "
+			f"excursion={curve['frequency_excursion']:.1f}Hz"
+		)
+
+	curve = curves[args.curve_index]
+	if args.curve_output is not None:
+		_write_curve(args.curve_output, curve["time"], curve["frequency"])
+		print(f"Saved selected curve to {args.curve_output}")
+
+	return curve["time"], curve["frequency"]
+
+
 def _write_curve(path, times, frequencies):
 	path.parent.mkdir(parents=True, exist_ok=True)
 	with path.open("w", newline="", encoding="utf-8") as file:
@@ -124,7 +170,11 @@ def command_simulate(args):
 
 def command_optimize(args):
 	flight = load_flight(args.track, args.origin_lat, args.origin_lon)
-	obs_time, obs_freq = _load_observations(args.observations)
+	if args.audio is not None:
+		obs_time, obs_freq = _detect_audio_curve(args)
+	else:
+		observations_path = args.observations or DEFAULT_OBSERVATIONS
+		obs_time, obs_freq = _load_observations(observations_path)
 
 	coordinate_map = None
 	height_map = None
@@ -325,11 +375,45 @@ def build_parser():
 		default=DEFAULT_TRACK,
 		help=f"Flight track CSV (default: {DEFAULT_TRACK})",
 	)
-	optimize.add_argument(
+	observation_source = optimize.add_mutually_exclusive_group()
+	observation_source.add_argument(
 		"--observations",
 		type=Path,
-		default=DEFAULT_OBSERVATIONS,
 		help=f"Observed curve CSV or legacy pickle file (default: {DEFAULT_OBSERVATIONS})",
+	)
+	observation_source.add_argument(
+		"--audio",
+		type=Path,
+		help="Audio recording to analyze and use as the observed curve",
+	)
+	optimize.add_argument(
+		"--curve-min-frequency",
+		type=float,
+		default=200.0,
+		help="Lowest frequency to detect in audio, in Hz (default: 200)",
+	)
+	optimize.add_argument(
+		"--curve-max-frequency",
+		type=float,
+		default=2000.0,
+		help="Highest frequency to detect in audio, in Hz (default: 2000)",
+	)
+	optimize.add_argument(
+		"--curve-max-curves",
+		type=int,
+		default=8,
+		help="Maximum candidate curves to detect in audio (default: 8)",
+	)
+	optimize.add_argument(
+		"--curve-index",
+		type=int,
+		default=0,
+		help="Zero-based detected curve to estimate with (default: 0, highest-ranked)",
+	)
+	optimize.add_argument(
+		"--curve-output",
+		type=Path,
+		help="Optionally save the selected detected curve to a CSV file",
 	)
 	optimize.add_argument(
 		"--origin-lat",

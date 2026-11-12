@@ -8,7 +8,6 @@ from src.geo import EARTH_RADIUS
 
 SOUND_SPEED = 343.0
 
-
 @dataclass(frozen=True)
 class ObserverEstimate:
 	x: float

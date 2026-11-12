@@ -19,7 +19,7 @@ Install the main dependencies:
 python3 -m pip install numpy pandas scipy matplotlib "xarray[netcdf]"
 ```
 
-For the spectrogram viewer and curve tool:
+For audio-based curve detection in `estimate`, and for the spectrogram viewer and curve tool:
 
 ```sh
 python3 -m pip install PySide6 pyqtgraph soundfile sounddevice
@@ -67,15 +67,27 @@ Open a recording and find a visible aircraft-related frequency line. The viewer 
 
 You can zoom and pan, select a time range, adjust the frequency range and display contrast, and listen to the recording with optional playback filters. Export the visible part of the spectrogram using **Export visible data…**.
 
-### 3. Trace the Doppler curve
+### 3. Extract the Doppler curve
+
+You can have `estimate` detect a curve from an audio recording and use it directly:
+
+```sh
+python3 main.py estimate \
+  --audio path/to/recording.wav \
+  --track data/test_track.csv \
+  --curve-min-frequency 200 \
+  --curve-max-frequency 2000
+```
+
+The detector ranks candidate curves by quality and uses the highest-ranked one by default. If it finds multiple curves, use `--curve-index` to choose another (indices start at 0). To save the selected curve for review or reuse, add `--curve-output data/detected_curve.csv`. Adjust the frequency range to cover the line in your recording.
+
+You can also trace the curve manually. Open a spectrogram snapshot in the curve tool:
 
 ```sh
 python3 tools/curve_tool/main.py
 ```
 
-Open the snapshot exported by the viewer and add points along the frequency line. You can move or delete points to improve the trace.
-
-Export the result as a CSV. It contains two columns:
+Add points along the frequency line, then export the result as a CSV with two columns:
 
 ```csv
 time_s,frequency_hz
@@ -87,7 +99,7 @@ The times are in seconds and the frequencies are in hertz.
 
 ### 4. Estimate the observer position
 
-Run the optimizer with the measured curve and the aircraft track:
+Run the optimizer with the extracted or manually measured curve and the aircraft track. For an existing curve CSV:
 
 ```sh
 python3 main.py estimate \
@@ -203,7 +215,13 @@ python3 main.py estimate [options]
 | Option | Default | Description |
 | --- | --- | --- |
 | `--track` | `data/49d665_track.csv` | Flight track CSV. |
-| `--observations` | `data/observed_curve.csv` | Measured curve CSV. Legacy tuple pickles are also accepted. |
+| `--observations` | `data/observed_curve.csv` | Measured curve CSV. Legacy tuple pickles are also accepted. Mutually exclusive with `--audio`. |
+| `--audio` | — | Audio file to detect a curve from instead of loading `--observations` (requires `soundfile`). |
+| `--curve-min-frequency` | `200` Hz | Lowest frequency searched in the audio. |
+| `--curve-max-frequency` | `2000` Hz | Highest frequency searched in the audio. |
+| `--curve-max-curves` | `8` | Maximum number of candidate curves to detect. |
+| `--curve-index` | `0` | Zero-based candidate index to use; 0 is the highest-ranked curve. |
+| `--curve-output` | — | Optional CSV path for saving the selected detected curve. |
 | `--origin-lat` | `51.364946` | Latitude of the reference point around which the observer position is searched. |
 | `--origin-lon` | `0.856076` | Longitude of the reference point around which the observer position is searched. |
 | `--width` | `10000` m | East/west search width. |
