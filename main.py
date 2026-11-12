@@ -1,6 +1,7 @@
 import argparse
 import csv
 import pickle
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -74,7 +75,7 @@ def _load_observations(path):
 	if np.any(np.diff(obs_time) <= 0):
 		raise ValueError("Observation times must be strictly increasing")
 
-	return obs_time - obs_time[0], obs_freq
+	return obs_time, obs_freq
 
 
 def _write_curve(path, times, frequencies):
@@ -87,7 +88,9 @@ def _write_curve(path, times, frequencies):
 
 def command_track(args):
 	flight = load_flight(args.track, args.origin_lat, args.origin_lon)
-	print(f"Flight duration: {flight.t[0]:.3f}–{flight.t[-1]:.3f} s")
+	start = datetime.fromtimestamp(flight.t[0], timezone.utc).isoformat()
+	end = datetime.fromtimestamp(flight.t[-1], timezone.utc).isoformat()
+	print(f"Flight time range (UTC): {start}–{end}")
 	print(f"Track points: {len(flight.t)}")
 	if args.plot:
 		plot_track(flight)
@@ -135,6 +138,9 @@ def command_optimize(args):
 			args.grid_step,
 		)
 
+	delta_min = args.delta_min
+	if delta_min is None:
+		delta_min = flight.t[0] - obs_time[0]
 	delta_max = args.delta_max
 	if delta_max is None:
 		delta_max = flight.t[-1] - obs_time[-1]
@@ -144,7 +150,7 @@ def command_optimize(args):
 		obs_freq,
 		x_bounds=(-args.width / 2, args.width / 2),
 		y_bounds=(-args.height / 2, args.height / 2),
-		delta_bounds=(args.delta_min, delta_max),
+		delta_bounds=(delta_min, delta_max),
 		coordinate_map=coordinate_map,
 		height_map=height_map,
 		coarse_xy_step=args.coarse_xy_step,
@@ -162,7 +168,10 @@ def command_optimize(args):
 	print(f"Offset east/west (x): {estimate.x:.3f} m")
 	print(f"Offset north/south (y): {estimate.y:.3f} m")
 	print(f"Observer terrain elevation: {estimate.observer_alt:.3f} m")
-	print(f"Time offset: {estimate.delta_t:.6f} s")
+	recording_start = datetime.fromtimestamp(
+		estimate.delta_t, timezone.utc
+	).isoformat()
+	print(f"Audio recording start (UTC): {recording_start}")
 	print(f"Estimated source frequency: {estimate.estimated_frequency_hz:.6f} Hz")
 	print(f"Frequency variance: {estimate.variance:.9g} Hz²")
 	print(f"Success: {estimate.success} ({estimate.message})")
@@ -366,13 +375,12 @@ def build_parser():
 	optimize.add_argument(
 		"--delta-min",
 		type=float,
-		default=0.0,
-		help="Minimum receive-time offset in seconds (default: 0)",
+		help="Minimum audio-start Unix timestamp (default: flight start)",
 	)
 	optimize.add_argument(
 		"--delta-max",
 		type=float,
-		help="Maximum receive-time offset in seconds (default: latest offset that fits the flight)",
+		help="Maximum audio-start Unix timestamp (default: latest time that fits the flight)",
 	)
 	optimize.add_argument(
 		"--coarse-xy-step",
@@ -384,7 +392,7 @@ def build_parser():
 		"--coarse-time-step",
 		type=float,
 		default=30,
-		help="Coarse search spacing for receive-time offset in seconds (default: 30)",
+		help="Coarse search spacing for audio-start time in seconds (default: 30)",
 	)
 	optimize.add_argument(
 		"--refine-starts",

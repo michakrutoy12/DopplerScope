@@ -34,7 +34,8 @@ def get_height_map(data, center_lat, center_lon, width_m, height_m, step_m):
 class InterpolatedFlight:
 	def __init__(self, df, origin_lat, origin_lon, start_time):
 		self.df = df
-		self.t = df.index.to_numpy(dtype=float)
+		self.start_time = float(start_time)
+		self.t = df.index.to_numpy(dtype=float) + self.start_time
 
 		self.origin_lat = np.radians(origin_lat)
 		self.origin_lon = np.radians(origin_lon)

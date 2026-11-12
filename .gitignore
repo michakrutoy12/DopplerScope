@@ -7,6 +7,7 @@
 
 !src/
 !src/**
+src/optimize_test.py
 
 !data
 !data/test_track.csv

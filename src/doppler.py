@@ -140,7 +140,7 @@ def _evaluate_candidate(
 
 	flight_start = float(flight.t[0])
 	flight_end = float(flight.t[-1])
-	receive_time = flight_start + obs_time + delta_t
+	receive_time = obs_time + delta_t
 	emission_time = receive_time.copy()
 	observer = np.array([x, y, observer_altitude])
 	valid = np.ones(len(obs_time), dtype=bool)
