@@ -10,7 +10,7 @@ import xarray as xr
 
 from src.audio import embed_thick_doppler
 from src.doppler import optimize_observer, simulate_doppler
-from src.geo import EARTH_RADIUS, get_height_map, load_flight, plot_track
+from src.flight import EARTH_RADIUS, get_height_map, load_flight, plot_track
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent

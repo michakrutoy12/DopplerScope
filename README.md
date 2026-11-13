@@ -325,24 +325,3 @@ Recordings, generated files, local flight tracks, spectrogram snapshots, and ter
 | `data/test_track.csv` | Example flight track. |
 | `data/observed_curve.csv` | Example measured Doppler curve. |
 | `data/GEBCO_2026.nc` | Terrain dataset downloaded separately. |
-
-## Project structure
-
-```text
-main.py
-src/
-  audio.py
-  doppler.py
-  geo.py
-tools/
-  record_track.py
-  view_spectrogram/
-  curve_tool/
-data/
-```
-
-Main modules:
-
-- `src/geo.py` — flight-track loading, interpolation, and terrain data.
-- `src/doppler.py` — Doppler simulation and observer-position optimization.
-- `src/audio.py` — synthetic audio generation.

@@ -4,7 +4,7 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import minimize
 
-from src.geo import EARTH_RADIUS
+from src.flight import EARTH_RADIUS
 
 SOUND_SPEED = 343.0
 
